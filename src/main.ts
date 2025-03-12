@@ -18,7 +18,6 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   // Configurações globais
-  app.enableCors();
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -26,6 +25,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // CORS
+  app.enableCors();
 
   // Porta da aplicação
   const port = process.env.PORT ?? 3001;
@@ -36,4 +38,7 @@ async function bootstrap() {
   );
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('Error starting the application:', error);
+  process.exit(1);
+});
