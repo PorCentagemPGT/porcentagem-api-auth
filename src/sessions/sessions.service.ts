@@ -15,7 +15,7 @@ export class SessionsService {
    * @returns A sessão criada
    */
   async create(createSessionDto: CreateSessionDto): Promise<Session> {
-    this.logger.debug(`Creating session for user ${createSessionDto.userId}`);
+    this.logger.log(`Creating session for user ${createSessionDto.userId}`);
 
     const session = await this.database.session.create({
       data: {
@@ -27,7 +27,7 @@ export class SessionsService {
       },
     });
 
-    this.logger.debug(
+    this.logger.log(
       `Session created for user ${createSessionDto.userId} with ID ${session.id}`,
     );
 

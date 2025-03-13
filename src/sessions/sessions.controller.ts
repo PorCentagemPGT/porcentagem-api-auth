@@ -25,7 +25,7 @@ class SessionEntity implements Session {
   updatedAt: Date;
 }
 
-@ApiTags('sessions')
+@ApiTags('Session')
 @Controller('sessions')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
