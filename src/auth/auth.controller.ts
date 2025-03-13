@@ -39,9 +39,9 @@ export class AuthController {
     type: AuthResponseDto,
   })
   async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-    this.logger.debug(`Login request received for user ${loginDto.userId}`);
+    this.logger.log(`Login request started - userId: ${loginDto.userId}`);
     const result = await this.authService.generateTokens(loginDto.userId);
-    this.logger.debug('Login successful, tokens generated');
+    this.logger.log(`Login request completed - userId: ${loginDto.userId}`);
     return result;
   }
 
@@ -68,27 +68,28 @@ export class AuthController {
   async validate(
     @Headers('authorization') authHeader: string,
   ): Promise<ValidateTokenDto> {
-    this.logger.debug(`Received authorization header: ${authHeader}`);
+    this.logger.log('Token validation request started');
 
     if (!authHeader) {
-      this.logger.debug('No authorization header provided');
-      throw new UnauthorizedException(
-        'Token não fornecido ou formato inválido',
+      this.logger.warn(
+        'Token validation failed - No authorization header provided',
       );
+      throw new UnauthorizedException('Token not provided or invalid format');
     }
 
     if (!authHeader.startsWith('Bearer ')) {
-      this.logger.debug('Authorization header does not start with Bearer');
-      throw new UnauthorizedException(
-        'Token não fornecido ou formato inválido',
+      this.logger.warn(
+        'Token validation failed - Invalid authorization header format',
       );
+      throw new UnauthorizedException('Token not provided or invalid format');
     }
 
-    const token = authHeader.substring(7); // Remove o prefixo 'Bearer '
-    this.logger.debug(`Extracted token: ${token}`);
-
+    const token = authHeader.substring(7);
     const result = await this.authService.validateToken(token);
-    this.logger.debug(`Token validation result: ${JSON.stringify(result)}`);
+
+    this.logger.log(
+      `Token validation completed - userId: ${result.userId}, valid: ${result.isValid}`,
+    );
 
     return result;
   }

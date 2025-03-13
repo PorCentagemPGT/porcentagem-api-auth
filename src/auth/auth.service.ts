@@ -22,88 +22,78 @@ export class AuthService {
   ) {}
 
   /**
-   * Gera tokens de acesso e refresh para um usuário
-   * @param userId ID do usuário
-   * @returns Tokens de acesso e refresh
+   * Generates access and refresh tokens for a user
+   * @param userId User ID
+   * @returns Access and refresh tokens
    */
   async generateTokens(userId: string): Promise<AuthResponseDto> {
-    this.logger.debug(`Generating tokens for user ${userId}`);
+    this.logger.log(`Token generation started - userId: ${userId}`);
 
-    // Gera o payload do JWT
+    // Generate JWT payload
     const payload = { sub: userId };
-    this.logger.debug(`JWT payload: ${JSON.stringify(payload)}`);
 
-    // Gera o access token
+    // Generate access token
     const accessToken = await this.jwtService.signAsync(payload);
-    this.logger.debug('Access token generated');
 
-    // Gera o refresh token com TTL maior
+    // Generate refresh token with longer TTL
     const refreshTokenTtl = this.configService.getOrThrow<string>(
       'JWT_REFRESH_TOKEN_TTL',
     );
-    this.logger.debug(`Refresh token TTL: ${refreshTokenTtl}`);
 
     const refreshToken = await this.jwtService.signAsync(payload, {
       expiresIn: refreshTokenTtl,
     });
-    this.logger.debug('Refresh token generated');
 
-    // Calcula a data de expiração do refresh token
+    // Calculate refresh token expiration date
     const expiresAt = new Date();
     const days = parseInt(refreshTokenTtl.replace('d', ''));
     expiresAt.setDate(expiresAt.getDate() + days);
-    this.logger.debug(`Refresh token expires at: ${expiresAt.toISOString()}`);
 
-    // Salva a sessão com o refresh token
+    // Save session with refresh token
     await this.sessionsService.create({
       userId,
       refreshToken,
       expiresAt,
     });
-    this.logger.debug('Session created in database');
 
-    // Calcula o tempo de expiração do access token
+    // Calculate access token expiration
     const accessTokenTtl = this.configService.getOrThrow<string>(
       'JWT_ACCESS_TOKEN_TTL',
     );
     const minutes = parseInt(accessTokenTtl.replace('m', ''));
-    this.logger.debug(`Access token TTL: ${minutes} minutes`);
+
+    this.logger.log(`Token generation completed - userId: ${userId}`);
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: minutes * 60, // Converte minutos para segundos
+      expiresIn: minutes * 60, // Convert minutes to seconds
     };
   }
 
   /**
-   * Valida um token JWT e retorna informações sobre sua validade
-   * @param token Token JWT a ser validado
-   * @returns Informações sobre a validade do token
+   * Validates a JWT token and returns information about its validity
+   * @param token JWT token to validate
+   * @returns Information about token validity
    */
   async validateToken(token: string): Promise<ValidateTokenDto> {
-    this.logger.debug('Starting token validation');
-    this.logger.debug(`Token to validate: ${token}`);
+    this.logger.log(`Token validation started - token: ${token}`);
 
     try {
-      // Verifica se o token é válido e decodifica o payload
-      this.logger.debug('Attempting to verify token');
+      // Verify token and decode payload
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
-      this.logger.debug(`Token payload: ${JSON.stringify(payload)}`);
 
-      // Calcula o tempo restante de validade
-      const expirationTime = payload.exp * 1000; // Converte para milissegundos
+      // Calculate remaining time
+      const expirationTime = payload.exp * 1000;
       const currentTime = Date.now();
       const expiresIn = Math.max(
         0,
         Math.floor((expirationTime - currentTime) / 1000),
       );
 
-      this.logger.debug(
-        `Token expiration time: ${new Date(expirationTime).toISOString()}`,
+      this.logger.log(
+        `Token validation successful - userId: ${payload.sub}, expiresIn: ${expiresIn}s`,
       );
-      this.logger.debug(`Current time: ${new Date(currentTime).toISOString()}`);
-      this.logger.debug(`Time until expiration: ${expiresIn} seconds`);
 
       return {
         userId: payload.sub,
@@ -111,11 +101,9 @@ export class AuthService {
         expiresIn,
       };
     } catch (error: unknown) {
-      // Se o token for inválido ou expirado, retorna false
-      this.logger.debug(
-        `Token validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      this.logger.debug(`Error details: ${JSON.stringify(error)}`);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Token validation failed - Error: ${errorMessage}`);
 
       return {
         userId: '',
