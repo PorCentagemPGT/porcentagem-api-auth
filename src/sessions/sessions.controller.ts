@@ -21,6 +21,8 @@ class SessionEntity implements Session {
   deviceInfo: string | null;
   ipAddress: string | null;
   isBlocked: boolean;
+  isValid: boolean;
+  invalidatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

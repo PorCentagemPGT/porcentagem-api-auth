@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { CreateSessionDto } from './dto/create-session.dto';
 import { Session } from '@prisma/client';
+import { CreateSessionDto } from './dto/create-session.dto';
 
 @Injectable()
 export class SessionsService {
@@ -15,21 +15,15 @@ export class SessionsService {
    * @returns A sessão criada
    */
   async create(createSessionDto: CreateSessionDto): Promise<Session> {
-    this.logger.log(`Creating session for user ${createSessionDto.userId}`);
+    this.logger.log(
+      `Session creation started - userId: ${createSessionDto.userId}`,
+    );
 
     const session = await this.database.session.create({
-      data: {
-        userId: createSessionDto.userId,
-        refreshToken: createSessionDto.refreshToken,
-        expiresAt: createSessionDto.expiresAt,
-        deviceInfo: createSessionDto.deviceInfo,
-        ipAddress: createSessionDto.ipAddress,
-      },
+      data: createSessionDto,
     });
 
-    this.logger.log(
-      `Session created for user ${createSessionDto.userId} with ID ${session.id}`,
-    );
+    this.logger.log(`Session created successfully - id: ${session.id}`);
 
     return session;
   }
@@ -41,27 +35,63 @@ export class SessionsService {
    * @returns Lista de sessões do usuário
    */
   async findByUser(userId: string, isBlocked?: boolean): Promise<Session[]> {
-    this.logger.debug(
-      `Finding sessions for user ${userId}${
-        isBlocked !== undefined ? ` with isBlocked=${isBlocked}` : ''
-      }`,
-    );
-
-    const where: { userId: string; isBlocked?: boolean } = { userId };
-    if (isBlocked !== undefined) {
-      where.isBlocked = isBlocked;
-    }
+    this.logger.log(`Finding sessions for user ${userId}`);
 
     const sessions = await this.database.session.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
+      where: {
+        userId,
+        ...(isBlocked !== undefined && { isBlocked }),
+      },
     });
 
-    if (sessions.length === 0) {
-      throw new NotFoundException(`No sessions found for user ${userId}`);
+    this.logger.log(`Found ${sessions.length} sessions for user ${userId}`);
+
+    return sessions;
+  }
+
+  /**
+   * Invalida todas as sessões ativas de um usuário
+   * @param userId ID do usuário
+   * @returns A última sessão invalidada
+   * @internal Método de uso interno, utilizado apenas pelo AuthService
+   */
+  public async invalidateByUserId(userId: string): Promise<Session> {
+    this.logger.log('Session invalidation by userId started');
+
+    // Busca a sessão mais recente do usuário que ainda é válida
+    const session = await this.database.session.findFirst({
+      where: {
+        userId,
+        isValid: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!session) {
+      this.logger.warn(`No active session found for user ${userId}`);
+      throw new NotFoundException('Session not found or already invalidated');
     }
 
-    this.logger.debug(`Found ${sessions.length} sessions for user ${userId}`);
-    return sessions;
+    // Invalida todas as sessões do usuário
+    await this.database.session.updateMany({
+      where: {
+        userId,
+        isValid: true,
+      },
+      data: {
+        isValid: false,
+        invalidatedAt: new Date(),
+      },
+    });
+
+    const invalidatedSession = await this.database.session.findUniqueOrThrow({
+      where: { id: session.id },
+    });
+
+    this.logger.log(`Sessions invalidated successfully for user ${userId}`);
+
+    return invalidatedSession;
   }
 }

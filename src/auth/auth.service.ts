@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -60,14 +60,14 @@ export class AuthService {
     const accessTokenTtl = this.configService.getOrThrow<string>(
       'JWT_ACCESS_TOKEN_TTL',
     );
-    const minutes = parseInt(accessTokenTtl.replace('m', ''));
+    const expiresIn = this.calculateExpirationInSeconds(accessTokenTtl);
 
     this.logger.log(`Token generation completed - userId: ${userId}`);
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: minutes * 60, // Convert minutes to seconds
+      expiresIn,
     };
   }
 
@@ -110,6 +110,64 @@ export class AuthService {
         isValid: false,
         expiresIn: 0,
       };
+    }
+  }
+
+  /**
+   * Realiza o logout do usuário invalidando sua sessão
+   * @param token Token de refresh da sessão
+   * @returns Informações sobre o logout
+   */
+  async logout(token: string): Promise<{
+    message: string;
+    sessionId: string;
+    logoutTime: string;
+  }> {
+    this.logger.log('Logout request started');
+
+    try {
+      // Verifica se o token é válido
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+
+      if (!payload.sub) {
+        this.logger.warn('Token payload does not contain user ID');
+        throw new UnauthorizedException('Invalid token format');
+      }
+
+      // Invalida a sessão usando o userId do token
+      const session = await this.sessionsService.invalidateByUserId(
+        payload.sub,
+      );
+      this.logger.log(`Logout completed - sessionId: ${session.id}`);
+
+      return {
+        message: 'Logout successful',
+        sessionId: session.id,
+        logoutTime: new Date().toISOString(),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Logout failed - Error: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  private calculateExpirationInSeconds(ttl: string): number {
+    const value = parseInt(ttl.replace(/[a-z]/i, ''));
+    const unit = ttl.slice(-1).toLowerCase();
+
+    switch (unit) {
+      case 'd':
+        return value * 24 * 60 * 60;
+      case 'h':
+        return value * 60 * 60;
+      case 'm':
+        return value * 60;
+      case 's':
+        return value;
+      default:
+        throw new Error('Invalid TTL format');
     }
   }
 }

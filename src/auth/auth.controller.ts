@@ -13,6 +13,7 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { ValidateTokenDto } from './dto/validate-token.dto';
 import { ApiBearerAuthWithDocs } from './decorators/api-bearer-auth.decorator';
+import { LogoutResponseDto } from './dto/logout-response.dto';
 
 @ApiTags('Autenticação')
 @Controller('auth')
@@ -90,6 +91,55 @@ export class AuthController {
     this.logger.log(
       `Token validation completed - userId: ${result.userId}, valid: ${result.isValid}`,
     );
+
+    return result;
+  }
+
+  @Post('logout')
+  @ApiBearerAuthWithDocs()
+  @ApiOperation({
+    summary: 'Logout do usuário',
+    description: `
+      Endpoint para realizar o logout do usuário.
+      Invalida a sessão atual, impedindo o uso do refresh token.
+      
+      O token de refresh deve ser enviado no header Authorization.
+      Após o logout, o token de refresh não poderá mais ser usado
+      para obter novos tokens.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout realizado com sucesso',
+    type: LogoutResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido ou expirado',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Sessão não encontrada ou já invalidada',
+  })
+  async logout(
+    @Headers('authorization') authHeader: string,
+  ): Promise<LogoutResponseDto> {
+    this.logger.log('Logout request started');
+
+    if (!authHeader) {
+      this.logger.warn('Logout failed - No authorization header provided');
+      throw new UnauthorizedException('Token not provided or invalid format');
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+      this.logger.warn('Logout failed - Invalid authorization header format');
+      throw new UnauthorizedException('Token not provided or invalid format');
+    }
+
+    const token = authHeader.substring(7);
+    const result = await this.authService.logout(token);
+
+    this.logger.log(`Logout completed - sessionId: ${result.sessionId}`);
 
     return result;
   }
