@@ -14,6 +14,7 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { ValidateTokenDto } from './dto/validate-token.dto';
 import { ApiBearerAuthWithDocs } from './decorators/api-bearer-auth.decorator';
 import { LogoutResponseDto } from './dto/logout-response.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @ApiTags('Autenticação')
 @Controller('auth')
@@ -91,6 +92,57 @@ export class AuthController {
     this.logger.log(
       `Token validation completed - userId: ${result.userId}, valid: ${result.isValid}`,
     );
+
+    return result;
+  }
+
+  @Post('refresh')
+  @ApiBearerAuthWithDocs()
+  @ApiOperation({
+    summary: 'Refresh de tokens',
+    description: `
+      Endpoint para renovar os tokens de acesso.
+      Utiliza o refresh token para gerar um novo par de tokens.
+      
+      O refresh token deve ser enviado no header Authorization.
+      Após o refresh, o token antigo será invalidado e não poderá
+      mais ser usado.
+      
+      Retorna um novo par de tokens (access e refresh).
+    `,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Tokens renovados com sucesso',
+    type: RefreshTokenDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Token inválido, expirado ou sessão não encontrada',
+  })
+  async refresh(
+    @Headers('authorization') authHeader: string,
+  ): Promise<RefreshTokenDto> {
+    this.logger.log('Token refresh request started');
+
+    if (!authHeader) {
+      this.logger.warn(
+        'Token refresh failed - No authorization header provided',
+      );
+      throw new UnauthorizedException('Token not provided or invalid format');
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+      this.logger.warn(
+        'Token refresh failed - Invalid authorization header format',
+      );
+      throw new UnauthorizedException('Token not provided or invalid format');
+    }
+
+    const token = authHeader.substring(7);
+    const result = await this.authService.refreshToken(token);
+
+    this.logger.log('Token refresh completed');
 
     return result;
   }

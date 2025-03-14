@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { Session } from '@prisma/client';
 import { CreateSessionDto } from './dto/create-session.dto';
@@ -91,6 +96,49 @@ export class SessionsService {
     });
 
     this.logger.log(`Sessions invalidated successfully for user ${userId}`);
+
+    return invalidatedSession;
+  }
+
+  /**
+   * Valida e rotaciona um refresh token
+   * @param userId ID do usuário
+   * @param refreshToken Token de refresh atual
+   * @returns A sessão que foi invalidada
+   * @throws UnauthorizedException se o token não for válido ou a sessão não existir
+   */
+  async validateAndRotateRefreshToken(
+    userId: string,
+    refreshToken: string,
+  ): Promise<Session> {
+    this.logger.log('Refresh token validation started');
+
+    // Busca a sessão pelo refresh token
+    const session = await this.database.session.findFirst({
+      where: {
+        userId,
+        refreshToken,
+        isValid: true,
+      },
+    });
+
+    if (!session) {
+      this.logger.warn(`No valid session found for token`);
+      throw new UnauthorizedException('Session not found or invalid');
+    }
+
+    // Invalida o refresh token atual
+    const invalidatedSession = await this.database.session.update({
+      where: { id: session.id },
+      data: {
+        isValid: false,
+        invalidatedAt: new Date(),
+      },
+    });
+
+    this.logger.log(
+      `Refresh token rotated successfully - sessionId: ${session.id}`,
+    );
 
     return invalidatedSession;
   }

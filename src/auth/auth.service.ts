@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { SessionsService } from '../sessions/sessions.service';
 import { ValidateTokenDto } from './dto/validate-token.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 interface JwtPayload {
   sub: string;
@@ -149,6 +150,44 @@ export class AuthService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.warn(`Logout failed - Error: ${errorMessage}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Renova os tokens usando um refresh token válido
+   * @param refreshToken Token de refresh atual
+   * @returns Novos tokens de acesso e refresh
+   */
+  async refreshToken(refreshToken: string): Promise<RefreshTokenDto> {
+    this.logger.log('Token refresh started');
+
+    try {
+      // Verifica se o refresh token é válido
+      const payload =
+        await this.jwtService.verifyAsync<JwtPayload>(refreshToken);
+
+      if (!payload.sub) {
+        this.logger.warn('Token payload does not contain user ID');
+        throw new UnauthorizedException('Invalid token format');
+      }
+
+      // Valida e rotaciona o refresh token
+      await this.sessionsService.validateAndRotateRefreshToken(
+        payload.sub,
+        refreshToken,
+      );
+
+      // Gera novos tokens
+      const newTokens = await this.generateTokens(payload.sub);
+
+      this.logger.log(`Token refresh completed - userId: ${payload.sub}`);
+
+      return newTokens;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Token refresh failed - Error: ${errorMessage}`);
       throw error;
     }
   }
